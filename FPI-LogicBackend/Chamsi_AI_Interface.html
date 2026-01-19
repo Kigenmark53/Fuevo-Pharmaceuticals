@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to Chamsi Ai(Local)</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Configure Tailwind for Inter font and custom theme -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        'primary-dark': '#1e293b', // slate-800
+                        'secondary-dark': '#334155', // slate-700
+                        'accent-blue': '#3b82f6', // blue-500
+                        'accent-green': '#10b981', // emerald-500
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbar for better appearance in dark mode */
+        #chat-history::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #chat-history::-webkit-scrollbar-thumb {
+            background-color: #ea667c, #4ba276; /* slate-600 */
+            border-radius: 4px;
+        }
+
+        #chat-history::-webkit-scrollbar-track {
+            background-color: #e9e7e4e8; /* slate-800 */
+        }
+
+        /* Basic box sizing and font application */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a; /* slate-900 */
+            color: #f1f5f9; /* slate-100 */
+        }
+
+        /* Styling for the loading spinner */
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Message box animation */
+        .message-box {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+        }
+        .message-box.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+    </style>
+</head>
+<body class="flex flex-col h-screen antialiased">
+
+    <!-- Main Chat Area -->
+    <main class="flex-grow p-4 md:p-6 flex flex-col overflow-hidden">
+        <!-- Header -->
+        <header class="text-center pb-4 mb-4 border-b border-secondary-dark">
+            <h1 class="text-3xl font-bold text-accent-green">Chamsi AI </h1>
+            <p class="text-sm text-slate-400">How can I be of help?</p>
+        </header>
+
+        <!-- Chat History Container -->
+        <div id="chat-history" class="flex-grow overflow-y-auto space-y-4 rounded-lg p-3 bg-primary-dark shadow-xl mb-4">
+            <!-- Initial Message -->
+            <div class="flex justify-start">
+                <div class="bg-secondary-dark text-white p-3 rounded-t-xl rounded-br-xl max-w-2xl shadow-lg">
+                    Hello! I'm Chamsi AI, your personal AI assistant, ready to get you healthy!
+                </div>
+            </div>
+            <!-- Chat messages will be dynamically added here -->
+        </div>
+
+        <!-- Message/Error Notification Box -->
+        <div id="message-box" class="message-box fixed bottom-24 right-4 bg-red-600 text-white p-3 rounded-lg shadow-2xl z-50 transition-all duration-300" style="display:none;">
+            <p id="message-content"></p>
+            <button onclick="hideMessage()" class="ml-4 font-bold">X</button>
+        </div>
+
+        <!-- Input Area -->
+        <div class="flex items-center space-x-3 p-3 bg-primary-dark rounded-xl shadow-2xl border border-secondary-dark">
+            <textarea
+                id="prompt-input"
+                class="flex-grow bg-slate-700 text-white p-3 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-accent-blue placeholder-slate-400 text-sm"
+                rows="1"
+                placeholder="Enter your prompt here (e.g., 'Symptoms, medical questions')..."
+                oninput="autoResize(this)"
+                onkeydown="handleKeyDown(event)"
+            ></textarea>
+            <button
+                id="submit-btn"
+                class="bg-accent-blue hover:bg-black-600 text-white font-bold py-3 px-6 rounded-lg transition duration-200 shadow-md flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                onclick="submitPrompt()"
+            >
+                Send
+            </button>
+        </div>
+    </main>
+
+    <!-- JavaScript Logic -->
+    <script>
+        // --- GLOBAL CONFIGURATION ---
+
+        // IMPORTANT: Replace this placeholder with your actual Gemini API Key to run locally.
+        const API_KEY = "AIzaSyBmU8p10oycm_JUvtilei0Ilb9ti5LfkIc";
+        const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${API_KEY}`;
+
+        // --- UTILITIES ---
+
+        function showMessage(content, isError = true) {
+            const box = document.getElementById('message-box');
+            const contentEl = document.getElementById('message-content');
+
+            contentEl.textContent = content;
+            box.style.display = 'flex';
+            box.classList.remove('bg-red-600', 'bg-green-600');
+            box.classList.add(isError ? 'bg-red-600' : 'bg-green-600', 'show');
+        }
+
+        function hideMessage() {
+            const box = document.getElementById('message-box');
+            box.classList.remove('show');
+            setTimeout(() => {
+                box.style.display = 'none';
+            }, 300);
+        }
+
+        function autoResize(textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = textarea.scrollHeight + 'px';
+        }
+
+        function appendMessage(role, text) {
+            const history = document.getElementById('chat-history');
+            const isUser = role === 'user';
+            const alignmentClass = isUser ? 'justify-end' : 'justify-start';
+            const bubbleClasses = isUser
+                ? 'bg-accent-blue text-white rounded-t-xl rounded-bl-xl'
+                : 'bg-secondary-dark text-white rounded-t-xl rounded-br-xl';
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `flex ${alignmentClass} message-box show`; // Use message-box class for animation
+
+            const bubbleDiv = document.createElement('div');
+            bubbleDiv.className = `${bubbleClasses} p-3 max-w-2xl shadow-lg whitespace-pre-wrap`;
+            bubbleDiv.textContent = text;
+
+            messageDiv.appendChild(bubbleDiv);
+            history.appendChild(messageDiv);
+            history.scrollTop = history.scrollHeight; // Scroll to bottom
+        }
+
+        function createLoadingIndicator() {
+            const history = document.getElementById('chat-history');
+            const loadingDiv = document.createElement('div');
+            loadingDiv.id = 'loading-indicator';
+            loadingDiv.className = 'flex justify-start';
+            loadingDiv.innerHTML = `
+                <div class="bg-secondary-dark text-white p-3 rounded-t-xl rounded-br-xl max-w-2xl shadow-lg">
+                    <div class="spinner"></div> Thinking...
+                </div>
+            `;
+            history.appendChild(loadingDiv);
+            history.scrollTop = history.scrollHeight;
+        }
+
+        function removeLoadingIndicator() {
+            const indicator = document.getElementById('loading-indicator');
+            if (indicator) {
+                indicator.remove();
+            }
+        }
+
+        // --- GEMINI API CALL LOGIC ---
+
+        // Simple exponential backoff retry wrapper
+        async function fetchWithRetry(url, options, maxRetries = 5) {
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (response.ok) {
+                        return await response.json();
+                    } else if (response.status === 429 && i < maxRetries - 1) {
+                        const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                        console.warn(`Rate limit hit (429). Retrying in ${Math.round(delay / 1000)}s...`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        continue;
+                    } else {
+                        throw new Error(`API Error: ${response.statusText} (Status: ${response.status})`);
+                    }
+                } catch (error) {
+                    if (i === maxRetries - 1) throw error;
+                    const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                    console.warn(`Fetch error. Retrying in ${Math.round(delay / 1000)}s...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+            throw new Error("Maximum retries reached.");
+        }
+
+        async function getGeminiResponse(prompt) {
+             if (API_KEY === "YOUR_PERSONAL_GEMINI_API_KEY_HERE" || !API_KEY) {
+                return "Error: Please replace 'YOUR_PERSONAL_GEMINI_API_KEY_HERE' in the JavaScript code with your actual Gemini API key to proceed.";
+            }
+
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+            };
+
+            const options = {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            };
+
+            try {
+                const result = await fetchWithRetry(API_URL, options);
+                const candidate = result.candidates?.[0];
+
+                if (candidate && candidate.content?.parts?.[0]?.text) {
+                    return candidate.content.parts[0].text;
+                } else {
+                    console.error("Unexpected API response structure:", result);
+                    return "Sorry, I received an empty or unreadable response from the AI.";
+                }
+            } catch (error) {
+                console.error("Gemini API Call Failed:", error);
+                showMessage(`Failed to connect to AI: ${error.message}`);
+                return "Error: Could not retrieve a response.";
+            }
+        }
+
+        // --- MAIN APPLICATION LOGIC ---
+
+        window.submitPrompt = async function() {
+            const input = document.getElementById('prompt-input');
+            const submitBtn = document.getElementById('submit-btn');
+            const prompt = input.value.trim();
+
+            if (!prompt) {
+                showMessage("Please enter a prompt before sending.", false);
+                return;
+            }
+
+            // 1. Disable input and show user message
+            input.value = '';
+            autoResize(input);
+            submitBtn.disabled = true;
+            appendMessage('user', prompt);
+            createLoadingIndicator();
+
+            // 2. Get AI Response
+            const aiResponse = await getGeminiResponse(prompt);
+
+            // 3. Remove loading and display AI response
+            removeLoadingIndicator();
+            appendMessage('ai', aiResponse);
+            submitBtn.disabled = false;
+            input.focus();
+        }
+
+        window.handleKeyDown = function(event) {
+            // Check for Shift + Enter for new line, or just Enter to submit
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault(); // Prevents adding a new line
+                submitPrompt();
+            }
+        }
+
+        // Expose functions to the window object
+        window.autoResize = autoResize;
+        window.hideMessage = hideMessage;
+
+        
+
+    </script>
+</body>
+</html>

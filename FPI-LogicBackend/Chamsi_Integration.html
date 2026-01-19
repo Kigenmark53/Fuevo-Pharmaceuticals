@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chamsi AI - Integrated Session</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Configure Tailwind for Inter font and custom theme -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        // We keep these for accent elements (like buttons)
+                        'primary-dark': '#1e293b', // slate-800
+                        'secondary-dark': '#334155', // slate-700
+                        'accent-blue': '#3b82f6', // blue-500
+                        'accent-green': '#4ba276', // Requested green accent
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbar for better appearance on a light theme */
+        #chat-history::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #chat-history::-webkit-scrollbar-thumb {
+            background-color: #cbd5e1; /* slate-300 */
+            border-radius: 4px;
+        }
+
+        #chat-history::-webkit-scrollbar-track {
+            background: #f1f5f9; /* slate-100 */
+        }
+
+        /* --- Global Background & Text Colors --- */
+        body {
+            /* Applied the requested background gradient */
+            background: linear-gradient(135deg, #ea667c 0%, #4ba276 100%);
+            /* Dark text for better contrast on bright background */
+            color: #1e293b; 
+            transition: background-color 0.3s;
+        }
+
+        .chat-container {
+            /* Changed from dark gray to white for contrast */
+            --chat-bg: #ffffff; 
+            background-color: var(--chat-bg, #ffffff);
+            height: 80vh;
+            max-height: 800px;
+            min-width: 300px;
+            /* Updated shadow for contrast on light background */
+            box-shadow: 0 15px 30px -10px rgba(158, 117, 126, 0.692);
+        }
+
+        /* --- Message Bubble Styling for Light Theme with Downward Adjustment --- */
+        .message-user {
+            background-color: #4ba276; 
+            color: white;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+            padding: 10px 14px;
+            max-width: 80%;
+            margin-left: auto;
+
+            /* ADJUSTED BORDER RADIUS FOR DOWNWARD EFFECT (Top-Left, Top-Right, Bottom-Right, Bottom-Left) */
+            /* Pointed corner (4px) is now on the bottom-right (sender side) */
+            border-radius: 24px 24px 4px 24px; 
+        }
+
+        .message-ai {
+            background-color: #f3f4f6; /* gray-100 */
+            color: #1e293b; /* Dark text on light bubble */
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            padding: 10px 14px;
+            max-width: 80%;
+            margin-right: auto;
+
+            /* ADJUSTED BORDER RADIUS FOR DOWNWARD EFFECT (Top-Left, Top-Right, Bottom-Right, Bottom-Left) */
+            /* Pointed corner (4px) is now on the bottom-left (receiver side) */
+            border-radius: 24px 24px 24px 4px; 
+        }
+
+        .markdown-body {
+            line-height: 1.6;
+        }
+        
+        /* Ensures the textarea resizes nicely */
+        #prompt-input {
+            overflow-y: hidden;
+            max-height: 200px; /* Limit max height for large inputs */
+        }
+    </style>
+    <!-- Firebase Imports -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, collection, query, limit, addDoc, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        let app, db, auth, userId, unsubscribe;
+        const CHAT_COLLECTION = 'chat_sessions';
+
+        // Global variables provided by the environment (must be used)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        /**
+         * Initializes Firebase and authenticates the user.
+         */
+        window.initializeFirebase = async function() {
+            if (!firebaseConfig) {
+                console.error("Firebase configuration is missing.");
+                showMessage("Database error: Missing configuration.", false);
+                return;
+            }
+
+            try {
+                // Set Firestore log level for debugging
+                setLogLevel('Debug');
+                
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                let isAuthReady = false;
+
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        document.getElementById('user-id-display').textContent = `User ID: ${userId}`;
+                        if (!isAuthReady) {
+                             // Only set up listeners once after initial auth check
+                            isAuthReady = true;
+                            // Start listening to the chat after successful authentication
+                            listenForChatHistory();
+                        }
+                    } else {
+                        // Handle sign-out or initial anonymous sign-in
+                        userId = null; 
+                        document.getElementById('user-id-display').textContent = 'Authenticating...';
+                        
+                        // Attempt to sign in using the provided token or anonymously
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error("Firebase Initialization or Auth Error:", error);
+                showMessage(`Authentication failed: ${error.message}.`, false);
+            }
+        }
+
+        /**
+         * Returns the path for the chat messages collection.
+         */
+        function getChatCollectionRef() {
+            // Public path for collaborative chat: /artifacts/{appId}/public/data/chat_sessions
+            return collection(db, 'artifacts', appId, 'public', 'data', CHAT_COLLECTION);
+        }
+
+        /**
+         * Sets up a real-time listener for the chat history.
+         */
+        function listenForChatHistory() {
+            if (!db || !userId) return; // Guard clause
+
+            const q = query(
+                getChatCollectionRef(),
+                // NOTE: orderBy is removed as per instruction. Sorting will be done in memory.
+                limit(50)
+            );
+
+            // If an existing listener exists, unsubscribe it first
+            if (unsubscribe) {
+                unsubscribe();
+            }
+
+            unsubscribe = onSnapshot(q, (snapshot) => {
+                const messages = [];
+                snapshot.forEach(doc => {
+                    messages.push({ id: doc.id, ...doc.data() });
+                });
+                
+                // Sort messages by timestamp in memory (most recent at the bottom)
+                messages.sort((a, b) => (a.timestamp?.toMillis() || 0) - (b.timestamp?.toMillis() || 0));
+
+                renderChatHistory(messages);
+            }, (error) => {
+                console.error("Error listening to chat history:", error);
+                showMessage("Failed to load chat history. Check console for details.", false);
+            });
+        }
+        
+        /**
+         * Renders the chat history from the messages array.
+         * @param {Array<Object>} messages - The array of message objects.
+         */
+        function renderChatHistory(messages) {
+            const history = document.getElementById('chat-history');
+            history.innerHTML = ''; // Clear existing messages
+
+            messages.forEach(msg => {
+                // Ensure text is correctly extracted if it's an object from a previous save structure
+                const content = typeof msg.content === 'object' && msg.content !== null && msg.content.text ? msg.content.text : msg.content;
+                appendMessage(msg.role, content, false, msg.sources);
+            });
+            // Scroll to bottom after rendering
+            history.scrollTop = history.scrollHeight;
+        }
+
+        /**
+         * Appends a new message (user or AI) to the chat history.
+         * @param {string} role - 'user' or 'ai'.
+         * @param {string} content - The text content of the message.
+         * @param {boolean} [shouldSave=true] - Whether to save the message to Firestore.
+         * @param {Array<Object>} [sources=[]] - Array of source objects for AI response.
+         */
+        async function appendMessage(role, content, shouldSave = true, sources = []) {
+            const history = document.getElementById('chat-history');
+            const messageEl = document.createElement('div');
+            
+            const isUser = role === 'user';
+            
+            messageEl.className = `flex w-full mb-4 ${isUser ? 'justify-end' : 'justify-start'}`;
+            
+            // Container for the bubble
+            const bubbleEl = document.createElement('div');
+            bubbleEl.className = `message-${role} max-w-4xl`;
+            
+            // The content should be rendered as markdown
+            const contentHTML = DOMPurify.sanitize(marked.parse(content));
+            
+            bubbleEl.innerHTML = contentHTML;
+
+            // Add sources if present
+            if (sources && sources.length > 0) {
+                const sourcesEl = document.createElement('div');
+                // Use white text for user bubble, dark for AI bubble
+                sourcesEl.className = `mt-2 pt-2 border-t border-opacity-30 ${isUser ? 'border-white' : 'border-gray-500'} text-xs opacity-80`;
+                const sourceList = sources.map(source => 
+                    `<a href="${source.uri}" target="_blank" rel="noopener noreferrer" class="hover:underline block truncate" title="${source.title}">Source: ${source.title}</a>`
+                ).join('');
+                sourcesEl.innerHTML = `<strong>Sources:</strong>${sourceList}`;
+                bubbleEl.appendChild(sourcesEl);
+            }
+
+            messageEl.appendChild(bubbleEl);
+            history.appendChild(messageEl);
+
+            // Scroll to bottom
+            history.scrollTop = history.scrollHeight;
+
+            if (shouldSave) {
+                await saveMessage(role, content, sources);
+            }
+        }
+        
+        /**
+         * Creates and appends a loading indicator for the AI response.
+         */
+        function createLoadingIndicator() {
+            const history = document.getElementById('chat-history');
+            const loadingEl = document.createElement('div');
+            loadingEl.id = 'loading-indicator';
+            loadingEl.className = 'flex w-full mb-4 justify-start';
+            loadingEl.innerHTML = `
+                <div class="message-ai max-w-xs flex items-center space-x-2">
+                    <div class="dot-flashing bg-accent-blue w-2 h-2 rounded-full"></div>
+                    <div class="dot-flashing bg-accent-blue w-2 h-2 rounded-full animation-delay-100"></div>
+                    <div class="dot-flashing bg-accent-blue w-2 h-2 rounded-full animation-delay-200"></div>
+                    <span>AI is typing...</span>
+                </div>
+            `;
+            history.appendChild(loadingEl);
+            history.scrollTop = history.scrollHeight;
+        }
+
+        /**
+         * Removes the loading indicator from the chat history.
+         */
+        function removeLoadingIndicator() {
+            const loadingEl = document.getElementById('loading-indicator');
+            if (loadingEl) {
+                loadingEl.remove();
+            }
+        }
+        
+        /**
+         * Saves a message to Firestore.
+         * @param {string} role - 'user' or 'ai'.
+         * @param {string} content - The text content.
+         * @param {Array<Object>} [sources=[]] - Array of source objects.
+         */
+        async function saveMessage(role, content, sources = []) {
+            if (!db || !userId) {
+                console.warn("Firestore not initialized or user ID missing. Message not saved.");
+                return;
+            }
+            try {
+                await addDoc(getChatCollectionRef(), {
+                    userId: userId,
+                    role: role,
+                    content: content,
+                    timestamp: serverTimestamp(),
+                    sources: sources,
+                });
+            } catch (error) {
+                console.error("Error saving message:", error);
+                showMessage("Failed to save message to database.", false);
+            }
+        }
+
+        /**
+         * Displays a temporary notification message.
+         * @param {string} message - The message content.
+         * @param {boolean} isSuccess - Whether the message indicates success (green) or error (red).
+         */
+        function showMessage(message, isSuccess) {
+            const messageEl = document.getElementById('notification-message');
+            messageEl.textContent = message;
+            messageEl.className = `p-3 rounded-lg text-sm text-center fixed top-4 left-1/2 transform -translate-x-1/2 z-50 transition-opacity duration-300 shadow-lg ${
+                isSuccess ? 'bg-accent-green text-white' : 'bg-red-500 text-white'
+            } opacity-100`;
+            clearTimeout(window.messageTimeout);
+            window.messageTimeout = setTimeout(() => hideMessage(), 4000);
+        }
+
+        function hideMessage() {
+            const messageEl = document.getElementById('notification-message');
+            messageEl.classList.add('opacity-0');
+        }
+
+        /**
+         * Autosize the textarea based on content.
+         * @param {HTMLTextAreaElement} element - The textarea element.
+         */
+        function autoResize(element) {
+            element.style.height = 'auto';
+            element.style.height = (element.scrollHeight) + 'px';
+        }
+
+        /**
+         * Makes the API call to the Gemini model for content generation.
+         * @param {string} prompt - The user's query.
+         * @returns {Promise<string>} The generated text response.
+         */
+        async function getGeminiResponse(prompt) {
+            // Using the new model name for image generation
+            const MODEL_NAME = 'gemini-2.5-flash-preview-09-2025';
+            const apiKey = ""; // Canvas environment provides the key
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${Gemini_Api_key}`;
+
+            const systemPrompt = "You are Chamsi AI, a helpful and engaging assistant, that will help you regarding medical related problems. Consider me your medical partner.";
+            
+            // Fetch existing chat history for context (last 10 turns)
+            const history = document.getElementById('chat-history');
+            const messages = Array.from(history.children)
+                .slice(-10) // Take last 10 elements (5 user, 5 ai)
+                .filter(el => el.id !== 'loading-indicator')
+                .map(el => {
+                    const role = el.querySelector('.message-user') ? 'user' : 'model';
+                    // Extract the raw text content without markdown parsing or source elements
+                    let contentNode = el.querySelector(`.message-${role === 'user' ? 'user' : 'ai'}`).firstChild;
+                    // Check if contentNode is actually text or a div containing text
+                    let content = contentNode ? contentNode.textContent.trim() : "";
+                    
+                    // Fallback to bubble inner HTML if simple text extraction fails (e.g., if content is wrapped in markdown p tags)
+                    if (!content) {
+                       const bubble = el.querySelector(`.message-${role === 'user' ? 'user' : 'ai'}`);
+                       content = bubble ? bubble.textContent.trim() : "";
+                    }
+
+                    return { role: role, parts: [{ text: content }] };
+                });
+
+            // Add the new user prompt
+            messages.push({ role: "user", parts: [{ text: prompt }] });
+            
+            const payload = {
+                contents: messages,
+                tools: [{ "google_search": {} }],
+                systemInstruction: {
+                    parts: [{ text: systemPrompt }]
+                },
+            };
+
+            const MAX_RETRIES = 5;
+            let lastError = null;
+            
+            for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        lastError = new Error(`API request failed with status ${response.status}: ${errorText}`);
+                        if (response.status === 429 || response.status >= 500) {
+                            await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+                            continue;
+                        } else {
+                            throw lastError;
+                        }
+                    }
+
+                    const result = await response.json();
+                    const candidate = result.candidates?.[0];
+
+                    if (candidate && candidate.content?.parts?.[0]?.text) {
+                        const text = candidate.content.parts[0].text;
+                        
+                        let sources = [];
+                        const groundingMetadata = candidate.groundingMetadata;
+                        if (groundingMetadata && groundingMetadata.groundingAttributions) {
+                            sources = groundingMetadata.groundingAttributions
+                                .map(attribution => ({
+                                    uri: attribution.web?.uri,
+                                    title: attribution.web?.title,
+                                }))
+                                .filter(source => source.uri && source.title);
+                        }
+                        
+                        return { text: text, sources: sources };
+                    } else {
+                        return { text: "I apologize, I could not generate a response. Please try again.", sources: [] };
+                    }
+                } catch (error) {
+                    lastError = error;
+                    console.error(`Attempt ${attempt + 1} failed:`, error);
+                    await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+                }
+            }
+            
+            console.error("Gemini API call failed after all retries.", lastError);
+            return { text: "I'm having trouble connecting to the AI service. Please try again later.", sources: [] };
+        }
+
+
+        // --- Core Application Logic ---
+
+        window.submitPrompt = async function() {
+            if (!userId) {
+                showMessage("Please wait for authentication to complete before sending a message.", false);
+                return;
+            }
+            
+            const input = document.getElementById('prompt-input');
+            const submitBtn = document.getElementById('submit-btn');
+            const prompt = input.value.trim();
+
+            if (!prompt) {
+                showMessage("Please enter a prompt before sending.", false);
+                return;
+            }
+
+            // 1. Disable input and show user message
+            input.value = '';
+            autoResize(input);
+            submitBtn.disabled = true;
+            
+            // Store the user message first (shouldSave=true)
+            await appendMessage('user', prompt, true); 
+            createLoadingIndicator();
+
+            // 2. Get AI Response
+            const aiResponse = await getGeminiResponse(prompt);
+
+            // 3. Remove loading and display AI response
+            removeLoadingIndicator();
+            // Store the AI message with content and sources
+            await appendMessage('ai', aiResponse.text, true, aiResponse.sources); 
+            submitBtn.disabled = false;
+            input.focus();
+        }
+
+        window.handleKeyDown = function(event) {
+            // Check for Shift + Enter for new line, or just Enter to submit
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault(); // Prevents adding a new line
+                submitPrompt();
+            }
+        }
+
+        // --- Start the Firebase Initialization on window load ---
+        window.onload = initializeFirebase;
+
+        // Expose functions to the window object
+        window.autoResize = autoResize;
+        window.hideMessage = hideMessage;
+
+    </script>
+    <!-- Marked and DOMPurify for secure Markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@4.0.10/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@2.3.6/dist/purify.min.js"></script>
+</head>
+<!-- UPDATED: Changed 'items-center' to 'items-end' to position the container at the bottom -->
+<body class="min-h-screen flex items-end justify-center p-4">
+
+    <!-- Notification Message Container -->
+    <div id="notification-message" class="opacity-0"></div>
+
+    <div class="chat-container h-full w-full max-w-4xl flex flex-col rounded-xl shadow-2xl relative">
+        
+        <!-- Header -->
+        <header class="p-4 border-b border-gray-200 flex justify-between items-center bg-white rounded-t-xl">
+            <h1 class="text-2xl font-bold text-gray-800">Chamsi AI </h1>
+            <strong><p>Your trusty Medical Partner</p></strong>
+            <span id="user-id-display" class="text-xs text-gray-500 font-mono">Authenticating...</span>
+        </header>
+
+        <!-- Chat History -->
+        <main id="chat-history" class="flex-grow p-4 overflow-y-auto space-y-4"></main>
+
+        <!-- Input Area -->
+        <footer class="p-4 border-t border-gray-200 bg-white rounded-b-xl">
+            <div class="flex items-end space-x-3">
+                <textarea 
+                    id="prompt-input" 
+                    placeholder="Ask Chamsi AI anything... (Shift+Enter for new line)" 
+                    rows="1" 
+                    oninput="autoResize(this)" 
+                    onkeydown="handleKeyDown(event)"
+                    class="flex-grow resize-none p-3 border border-gray-300 rounded-lg focus:ring-accent-green focus:border-accent-green text-gray-800"
+                ></textarea>
+                <button 
+                    id="submit-btn" 
+                    onclick="submitPrompt()" 
+                    class="p-3 bg-accent-green text-white rounded-lg shadow-md hover:bg-opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-send">
+                        <path d="m22 2-7 20-4-9-9-4Z"/>
+                        <path d="M22 2 11 13"/>
+                    </svg>
+                </button>
+            </div>
+        </footer>
+    </div>
+    
+    <style>
+        /* Animation for loading dots */
+        @keyframes dot-flashing {
+            0% { background-color: #f3f4f6; }
+            50%, 100% { background-color: #4ba276; }
+        }
+
+        .dot-flashing {
+            animation: dot-flashing 1s infinite alternate;
+        }
+
+        .animation-delay-100 {
+            animation-delay: 0.2s;
+        }
+
+        .animation-delay-200 {
+            animation-delay: 0.4s;
+        }
+    </style>
+</body>
+</html>

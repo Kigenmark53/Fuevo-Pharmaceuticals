@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chamsi AI - Main Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #ea667c 0%, #4ba276 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+            width: 100%;
+            max-width: 600px; /* Wider for the main interface */
+            min-height: 80vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #ea667c 0%, #4ba276 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 30px;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .user-info {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .user-info span {
+            font-weight: 600;
+            color: #4ba276;
+        }
+
+        .logout-btn {
+            padding: 8px 16px;
+            background: #ff4757;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+
+        .logout-btn:hover {
+            background: #e84118;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        textarea {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0a6;
+            border-radius: 8px;
+            font-size: 15px;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 100px;
+            transition: border-color 0.3s;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #ea667c;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #ea667c 0%, #4ba276 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s, opacity 0.3s;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(150, 234, 102, 0.322);
+        }
+
+        .btn:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+        
+        .output-box {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 25px;
+            min-height: 150px;
+            border: 2px solid #e0e0e0;
+            white-space: pre-wrap;
+            font-size: 15px;
+            line-height: 1.6;
+            flex-grow: 1; /* Allow output box to fill space */
+        }
+
+        .citations {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f0fdf4;
+            border: 1px solid #dcfce7;
+            border-radius: 8px;
+            border-left: 4px solid #4ba276;
+        }
+
+        .citations p {
+            font-size: 14px;
+            color: #065f46;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .citations ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .citations li {
+            font-size: 13px;
+            margin-bottom: 5px;
+        }
+
+        .citations a {
+            color: #4ba276;
+            text-decoration: none;
+            word-break: break-all;
+        }
+
+        .citations a:hover {
+            text-decoration: underline;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="appContainer">
+        <div class="header">
+            <h1>Chamsi AI Interface</h1>
+            <p>Ask your health and wellness questions</p>
+        </div>
+
+        <div id="mainInterface" class="content hidden">
+            <div class="user-info">
+                <span>Welcome, <span id="displayUsername">...</span>!</span>
+                <button class="logout-btn" onclick="handleLogout()">Logout</button>
+            </div>
+
+            <div class="ai-interface">
+                <div class="form-group">
+                    <label for="aiInput">Ask Chamsi your general health or wellness question:</label>
+                    <textarea id="aiInput" placeholder="What are the latest dietary guidelines for heart health? (Always consult a doctor!)"></textarea>
+                </div>
+                
+                <button class="btn" onclick="processInput()">Ask Chamsi</button>
+                
+                <div class="output-box" id="outputBox">
+                    <em>Chamsi's response will appear here...</em>
+                </div>
+
+                <div class="citations hidden" id="citationsArea">
+                    <p>Sources Used:</p>
+                    <ul id="citationList">
+                        <!-- Citations will be injected here -->
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div id="loadingIndicator" class="content">
+             <h2 style="text-align: center; color: #4ba276;">Loading Session...</h2>
+             <p style="text-align: center; margin-top: 10px;">Please wait, or <a href="FP.html" style="color: #ea667c;">click here to login</a> if you are redirected.</p>
+        </div>
+    </div>
+
+    <script>
+        // In-memory session storage (set after loading from localStorage)
+        let currentUser = { username: null, token: null };
+        // IMPORTANT: This must match the port in chamsi_server_api.py
+        const API_URL = 'http://localhost:3000'; 
+
+        const mainInterface = document.getElementById('mainInterface');
+        const displayUsername = document.getElementById('displayUsername');
+        const aiInput = document.getElementById('aiInput');
+        const outputBox = document.getElementById('outputBox');
+        const citationsArea = document.getElementById('citationsArea');
+        const citationList = document.getElementById('citationList');
+        const askBtn = document.querySelector('.ai-interface .btn'); 
+        const loadingIndicator = document.getElementById('loadingIndicator');
+
+        /**
+         * Loads user session from localStorage and initializes the interface.
+         */
+        function initializeSession() {
+            const storedToken = localStorage.getItem('user_token');
+            const storedUsername = localStorage.getItem('user_username');
+
+            if (storedToken && storedUsername) {
+                // Session data found, initialize the app
+                currentUser = { username: storedUsername, token: storedToken };
+                displayUsername.textContent = currentUser.username;
+                loadingIndicator.classList.add('hidden');
+                mainInterface.classList.remove('hidden');
+            } else {
+                // No session data, redirect to login page
+                window.location.href = 'FP.html';
+            }
+        }
+
+        /**
+         * Clears session data and redirects to the login page.
+         */
+        function handleLogout() {
+            localStorage.removeItem('user_token');
+            localStorage.removeItem('user_username');
+            window.location.href = 'FP.html';
+        }
+
+        window.onload = initializeSession;
+
+        /**
+         * Function to send the user's prompt to the Python AI server.
+         */
+        async function processInput() {
+            const input = aiInput.value;
+            
+            // This check isn't strictly necessary since initializeSession handles it, 
+            // but it's good defensive programming.
+            if (!currentUser.token || !input.trim()) {
+                outputBox.innerHTML = '<em style="color: #ff4757;">Please log in or enter a question.</em>';
+                return;
+            }
+            
+            // Clear previous results
+            citationsArea.classList.add('hidden');
+            citationList.innerHTML = '';
+
+            askBtn.disabled = true;
+            askBtn.textContent = 'Searching and Generating Factual Information...';
+            outputBox.innerHTML = '<em style="color: #667eea;">Searching the web for current facts and generating response...</em>';
+
+            try {
+                // Call the Python Flask server on the /generate endpoint
+                const response = await fetch(`${API_URL}/generate`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        // Optional: Send the token if the /generate route requires authentication
+                        'Authorization': `Bearer ${currentUser.token}`
+                    },
+                    body: JSON.stringify({ prompt: input })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Display the main response
+                    outputBox.innerHTML = `<strong>Chamsi AI:</strong><br><br>${data.response}`;
+                    
+                    // Display citations if available
+                    if (data.sources && data.sources.length > 0) {
+                        citationsArea.classList.remove('hidden');
+                        citationList.innerHTML = '';
+                        data.sources.forEach(source => {
+                            const li = document.createElement('li');
+                            li.innerHTML = `<a href="${source.uri}" target="_blank" rel="noopener noreferrer" title="${source.title}">${source.title}</a>`;
+                            citationList.appendChild(li);
+                        });
+                    }
+                    
+                } else {
+                    // Handle server-side errors (e.g., failed token validation, API key missing)
+                    outputBox.innerHTML = `
+                        <strong style="color: #ff4757;">Error:</strong><br><br>
+                        ${data.message || 'Failed to get a response from the AI server.'}
+                        <br><br><em>Check if your <code>chamsi_server_api.py</code> is running and your authentication is valid.</em>
+                    `;
+                }
+            } catch (error) {
+                console.error('Network or server error during AI call:', error);
+                outputBox.innerHTML = '<strong style="color: #ff4757;">Network Error:</strong> Could not reach the server to get an AI response. Is `chamsi_server_api.py` running on port 3000?';
+            } finally {
+                askBtn.disabled = false;
+                askBtn.textContent = 'Ask Chamsi';
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chamsi AI - Auth</title>
+    <!-- Google Identity Services (GSI) Script -->
+    <script src="https://accounts.google.com/gsi/client" async></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #ea667c 0%, #4ba276 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+            width: 100%;
+            max-width: 450px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #ea667c 0%, #4ba276 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 15px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #ea667c;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #ea667c 0%, #4ba276 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s, opacity 0.3s;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(150, 234, 102, 0.322);
+        }
+
+        .btn:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            border-left: 4px solid #c33;
+            display: none;
+        }
+
+        .success {
+            background: #efe;
+            color: #3c3;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            border-left: 4px solid #3c3;
+            display: none;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .user-info {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .user-info span {
+            font-weight: 600;
+            color: #4ba276;
+        }
+
+        .logout-btn {
+            padding: 8px 16px;
+            background: #ff4757;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+
+        .logout-btn:hover {
+            background: #e84118;
+        }
+
+        .ai-interface {
+            margin-top: 20px;
+        }
+
+        textarea {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0a6;
+            border-radius: 8px;
+            font-size: 15px;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 100px;
+            transition: border-color 0.3s;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #ea667c;
+        }
+
+        .output-box {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+            min-height: 100px;
+            border: 2px solid #e0e0e0;
+        }
+
+        .demo-note {
+            background: #fff3cd;
+            color: #856404;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            margin-bottom: 15px;
+            border-left: 4px solid #ffc107;
+        }
+
+        /* Styling for the Google Sign-In Button */
+        .gsi-separator {
+            text-align: center;
+            margin: 20px 0;
+            font-size: 13px;
+            color: #999;
+            position: relative;
+        }
+
+        .gsi-separator::before,
+        .gsi-separator::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            width: 40%;
+            height: 1px;
+            background: #eee;
+        }
+
+        .gsi-separator::before {
+            left: 0;
+        }
+
+        .gsi-separator::after {
+            right: 0;
+        }
+
+        .g_id_signin {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .switch-auth {
+            text-align: center;
+            margin-top: 15px;
+            font-size: 14px;
+        }
+
+        .switch-auth a {
+            color: #4ba276;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .switch-auth a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Chamsi AI</h1>
+            <p>Providing health to all</p>
+        </div>
+
+        <!-- Authentication Form Area -->
+        <div id="authForm" class="content">
+            <div class="demo-note">
+                <strong>NOTE:</strong> This client connects to your Node.js server at <code>http://localhost:3000</code>.
+                Replace <code>PUT_YOUR_WEB_CLIENT_ID_HERE</code> with your Google Web Application Client ID.
+            </div>
+            
+            <div id="statusMessage" class="error"></div>
+            
+            <!-- --- Login Form Content (Active by default) --- -->
+            <div id="loginFormContent">
+                
+                <div class="gsi-separator" style="margin-top: 25px;"></div>
+
+                <!-- Google Sign-In Button Container -->
+                <div
+                    id="g_id_onload"
+                    data-auto_prompt="false"
+                    data-callback="handleCredentialResponse"
+                    data-client_id="PUT_YOUR_WEB_CLIENT_ID_HERE"
+                    data-ux_mode="popup"
+                ></div>
+                <div class="g_id_signin"></div>
+                
+                <div class="gsi-separator">OR</div>
+
+                <form id="loginFormElement" onsubmit="handleLogin(event)">
+                    <div class="form-group">
+                        <label for="loginIdentifier">Username or Email</label>
+                        <input type="text" id="loginIdentifier" placeholder="Enter username or email" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="loginPassword">Password</label>
+                        <input type="password" id="loginPassword" placeholder="Enter your password" required>
+                    </div>
+                    
+                    <button type="submit" id="loginBtn" class="btn">Login</button>
+                    
+                    <div class="switch-auth">
+                        Don't have an account? <a onclick="showAuthForm('signup')">Sign Up Here</a>
+                    </div>
+                </form>
+            </div>
+
+            <!-- --- Sign Up Form Content (Initially Hidden) --- -->
+            <div id="signupFormContent" class="hidden">
+                <h3>Create a New Account</h3>
+                
+                <div class="gsi-separator" style="margin-top: 25px;"></div>
+
+                <form id="signupFormElement" onsubmit="handleRegister(event)">
+                    <div class="form-group">
+                        <label for="signupUsername">Username</label>
+                        <input type="text" id="signupUsername" placeholder="Choose a username" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="signupEmail">Email</label>
+                        <input type="email" id="signupEmail" placeholder="Enter your email" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="signupPassword">Password</label>
+                        <input type="password" id="signupPassword" placeholder="Create a password" required>
+                    </div>
+                    
+                    <button type="submit" id="signupBtn" class="btn">Sign Up</button>
+                    
+                    <div class="switch-auth">
+                        Already have an account? <a onclick="showAuthForm('login')">Log In Here</a>
+                    </div>
+                </form>
+            </div>
+
+        </div>
+
+        <!-- Main Interface (hidden initially) -->
+        <div id="mainInterface" class="content hidden">
+            <div class="user-info">
+                <span>Welcome, <span id="displayUsername"></span>!</span>
+                <button class="logout-btn" onclick="handleLogout()">Logout</button>
+            </div>
+
+            <div class="ai-interface">
+                <div class="form-group">
+                    <label for="aiInput">Enter your input:</label>
+                    <textarea id="aiInput" placeholder="Type your message or data here..."></textarea>
+                </div>
+                
+                <button class="btn" onclick="processInput()">Ask Chamsi</button>
+                
+                <div class="output-box" id="outputBox">
+                    <em>Chamsi's response will appear here...</em>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // In-memory session storage (token would be stored securely in a real app)
+        let currentUser = { username: null, token: null };
+        const API_URL = 'http://localhost:3000'; // Matches your server.js port
+
+        const authForm = document.getElementById('authForm');
+        const mainInterface = document.getElementById('mainInterface');
+        const displayUsername = document.getElementById('displayUsername');
+        const statusMessage = document.getElementById('statusMessage');
+        const aiInput = document.getElementById('aiInput');
+        const outputBox = document.getElementById('outputBox');
+        
+        // Login elements
+        const loginIdentifierInput = document.getElementById('loginIdentifier');
+        const loginPasswordInput = document.getElementById('loginPassword');
+        const loginBtn = document.getElementById('loginBtn');
+        const loginFormContent = document.getElementById('loginFormContent');
+
+        // Sign Up elements
+        const signupUsernameInput = document.getElementById('signupUsername');
+        const signupEmailInput = document.getElementById('signupEmail');
+        const signupPasswordInput = document.getElementById('signupPassword');
+        const signupBtn = document.getElementById('signupBtn');
+        const signupFormContent = document.getElementById('signupFormContent');
+
+
+        /**
+         * Helper to show a message (error or success)
+         */
+        function showMessage(type, message) {
+            statusMessage.className = type === 'success' ? 'success' : 'error';
+            statusMessage.textContent = message;
+            statusMessage.style.display = 'block';
+        }
+
+        /**
+         * Clears all status messages.
+         */
+        function clearMessage() {
+            statusMessage.style.display = 'none';
+        }
+        
+        /**
+         * Switches between Login and Sign Up forms.
+         */
+        function showAuthForm(formType) {
+            clearMessage();
+            // Clear inputs when switching forms for a fresh start
+            loginIdentifierInput.value = '';
+            loginPasswordInput.value = '';
+            signupUsernameInput.value = '';
+            signupEmailInput.value = '';
+            signupPasswordInput.value = '';
+
+            if (formType === 'login') {
+                loginFormContent.classList.remove('hidden');
+                signupFormContent.classList.add('hidden');
+            } else if (formType === 'signup') {
+                loginFormContent.classList.add('hidden');
+                signupFormContent.classList.remove('hidden');
+            }
+        }
+
+        // Initialize the login form as active
+        window.onload = () => showAuthForm('login');
+
+
+        /**
+         * Google Sign-In Callback Handler
+         * This function is triggered when a user successfully signs in with Google.
+         */
+        function handleCredentialResponse(response) {
+            clearMessage();
+            console.log("Encoded Google ID token received:", response.credential);
+            
+            // Send the token to your server for validation and session creation
+            googleLogin(response.credential);
+        }
+
+        /**
+         * Sends the Google JWT to the backend for server-side validation and login.
+         */
+        async function googleLogin(idToken) {
+            const googleBtnContainer = document.querySelector('.g_id_signin');
+            const originalHtml = googleBtnContainer.innerHTML;
+            googleBtnContainer.innerHTML = 'Signing in with Google...'; // Simple loading state
+
+            try {
+                const response = await fetch(`${API_URL}/google-login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ idToken })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    currentUser.username = data.username || data.email;
+                    currentUser.token = data.token;
+                    showMessage('success', `Welcome, ${currentUser.username}!`);
+                    showMainInterface();
+                } else {
+                    showMessage('error', data.message || 'Google login failed on the server.');
+                }
+            } catch (error) {
+                console.error('Network or server error during Google login:', error);
+                showMessage('error', 'Could not connect to the authentication server for Google login.');
+            } finally {
+                // Restore button, note that GSI button often re-renders itself
+                // This is a placeholder to restore the loading message
+                googleBtnContainer.innerHTML = originalHtml; 
+            }
+        }
+        
+        /**
+         * Handles the new user registration process.
+         */
+        async function handleRegister(event) {
+            event.preventDefault();
+            
+            const username = signupUsernameInput.value;
+            const email = signupEmailInput.value;
+            const password = signupPasswordInput.value;
+            
+            signupBtn.disabled = true;
+            signupBtn.textContent = 'Registering...';
+            clearMessage();
+
+            try {
+                const response = await fetch(`${API_URL}/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, email, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Registration successful! Now switch to login form and notify.
+                    showMessage('success', 'Registration successful! Please log in to continue.');
+                    showAuthForm('login');
+                    
+                    // Pre-fill login form for convenience
+                    loginIdentifierInput.value = email;
+                } else {
+                    showMessage('error', data.message || 'Registration failed due to an unknown error.');
+                }
+            } catch (error) {
+                console.error('Network or server error during registration:', error);
+                showMessage('error', 'Could not connect to the registration server.');
+            } finally {
+                signupBtn.disabled = false;
+                signupBtn.textContent = 'Sign Up';
+            }
+        }
+
+
+        /**
+         * Handles the standard username/password login process.
+         */
+        async function handleLogin(event) {
+            event.preventDefault();
+            
+            const identifier = loginIdentifierInput.value;
+            const password = loginPasswordInput.value;
+            
+            // Disable button and clear previous message
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'Logging in...';
+            clearMessage();
+
+            try {
+                const response = await fetch(`${API_URL}/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ identifier, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Login successful, store user session data
+                    currentUser.username = data.username;
+                    currentUser.token = data.token; // Store the (fake) JWT token
+                    showMessage('success', data.message);
+                    showMainInterface();
+                } else {
+                    // Login failed (e.g., Invalid credentials, 401)
+                    showMessage('error', data.message || 'Invalid credentials.');
+                }
+            } catch (error) {
+                console.error('Network or server error during login:', error);
+                showMessage('error', 'Could not connect to the authentication server.');
+            } finally {
+                loginBtn.disabled = false;
+                loginBtn.textContent = 'Login';
+            }
+        }
+
+        function showMainInterface() {
+            authForm.classList.add('hidden');
+            mainInterface.classList.remove('hidden');
+            displayUsername.textContent = currentUser.username;
+            aiInput.value = ''; // Clear previous input
+            outputBox.innerHTML = '<em>Chamsi\'s response will appear here...</em>';
+        }
+
+        function handleLogout() {
+            // Clear local session data
+            currentUser = { username: null, token: null };
+            
+            // Reset UI
+            authForm.classList.remove('hidden');
+            mainInterface.classList.add('hidden');
+            // Clear form inputs and return to login form
+            showAuthForm('login');
+            clearMessage(); 
+        }
+
+        // Placeholder function for AI interaction
+        function processInput() {
+            const input = aiInput.value;
+            
+            if (!currentUser.token) {
+                outputBox.innerHTML = '<em style="color: #ff4757;">You must be logged in to use the AI.</em>';
+                return;
+            }
+
+            if (!input.trim()) {
+                outputBox.innerHTML = '<em style="color: #ff4757;">Please enter some input first.</em>';
+                return;
+            }
+            
+            // --- ACTUAL AI API CALL WOULD GO HERE ---
+            
+            outputBox.innerHTML = '<em style="color: #667eea;">Processing...</em>';
+            
+            setTimeout(() => {
+                outputBox.innerHTML = `
+                    <strong>AI Response:</strong><br><br>
+                    Input received: "${input}"<br><br>
+                    <em>Your request would normally be validated with the Bearer token (<code>${currentUser.token}</code>) 
+                    and processed by your AI backend.</em>
+                `;
+            }, 1000);
+        }
+    </script>
+</body>
+</html>
